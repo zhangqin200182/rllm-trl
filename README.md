@@ -17,9 +17,12 @@ python -m rllm_trl.train
 # 自然语言配置（支持中英文）
 python -m rllm_trl.train "用 qwen-0.5b 训练数学 agent，64 个问题，2 个 epoch"
 python -m rllm_trl.train "quick test with 16 problems"
+
+# 从配置文件启动（由 rllm-config skill 生成）
+python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json
 ```
 
-训练输出在 `rllm_trl/output/`：轨迹文件（JSONL）、perf_stats.json、最终模型。
+训练输出在 `rllm_trl/output/runs/<run_id>/`：config.json、training_log.txt、trajectories/（JSONL）、perf_stats.json、analysis.json、final_model/。
 
 ## Claude Code Skill 自动训练系统
 
@@ -118,6 +121,26 @@ train.py → GRPOTrainer → rollout_func → HFAgentExecutionEngine → agent/e
 **最小抽象**：不依赖完整 rLLM 框架，只内联 `BaseAgent`、`BaseEnv`、`Step`、`Trajectory`，保持依赖轻量。
 
 **Skill 解耦**：每个 skill 可独立调用（如 `/rllm-analyze` 单独分析上次训练），也可由主编排串联成完整闭环。
+
+## Skill Bank
+
+Skill 通过 `skill-bank/` 目录管理，采用 base + patch + compile 架构。不要直接编辑 `.claude/skills/*/SKILL.md`，而是修改 base 或添加 patch，然后编译。
+
+```bash
+# 编译单个 skill
+python skill-bank/compile.py rllm-config
+
+# 编译整个 group
+python skill-bank/compile.py --group rllm
+
+# 查看 patch 状态
+python skill-bank/compile.py --status
+
+# 预览变更
+python skill-bank/compile.py --diff rllm-config
+```
+
+每个 skill 的结构：`skill-bank/<group>/<skill>/base.md`（带 section 锚点）、`patches/*.md`、`manifest.yaml`。详见 `docs/skill-bank-design.md`。
 
 ## License
 
