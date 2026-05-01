@@ -86,7 +86,8 @@ def parse_frontmatter(text):
     body = "\n".join(lines[end + 1 :])
     try:
         fm = yaml.safe_load(fm_text) or {}
-    except yaml.YAMLError:
+    except yaml.YAMLError as e:
+        print(f"Warning: YAML parse error in frontmatter: {e}", file=sys.stderr)
         fm = {}
     return fm, body
 

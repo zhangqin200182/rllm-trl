@@ -1,0 +1,51 @@
+{
+  "total_rounds": 3,
+  "current_round": 3,
+  "current_step": "complete",
+  "description": "用 qwen-0.5b 训练数学 agent",
+  "mode": "approve",
+  "completed": true,
+  "rounds": [
+    {
+      "round": 1,
+      "run_id": "run_1777650398",
+      "reward_start": 0.25,
+      "reward_peak": 1.0,
+      "reward_end": 0.0,
+      "reward_avg": 0.39,
+      "completed": false,
+      "abort_reason": "catastrophic forgetting — reward 1.00→0.00, early stopped at step 14/128",
+      "patches_generated": 2,
+      "patches_accepted": 2,
+      "patches": ["traj-20260501-155627-param-ranges", "traj-20260501-155627-anomaly-detection"],
+      "config": {"lr": 1e-5, "epochs": 2, "num_problems": 64, "difficulty": "mixed", "batch_size": 2, "num_generations": 4}
+    },
+    {
+      "round": 2,
+      "run_id": "run_1777651915",
+      "reward_start": 0.75,
+      "reward_peak": 1.0,
+      "reward_end": 0.0,
+      "reward_avg": 0.484,
+      "completed": false,
+      "abort_reason": "forgetting delayed but not eliminated — collapse at step 9, early stopped at step 16/64",
+      "patches_generated": 1,
+      "patches_accepted": 1,
+      "patches": ["traj-20260502-001000-problem-count"],
+      "config": {"lr": 5e-6, "epochs": 1, "num_problems": 64, "difficulty": "mixed", "batch_size": 2, "num_generations": 4}
+    },
+    {
+      "round": 3,
+      "run_id": "run_1777652469",
+      "reward_start": 1.0,
+      "reward_peak": 1.0,
+      "reward_end": 1.0,
+      "reward_avg": 0.742,
+      "completed": true,
+      "patches_generated": 0,
+      "patches_accepted": 0,
+      "patches": [],
+      "config": {"lr": 5e-6, "epochs": 1, "num_problems": 32, "difficulty": "mixed", "batch_size": 2, "num_generations": 4}
+    }
+  ]
+}

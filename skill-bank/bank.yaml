@@ -17,6 +17,22 @@ groups:
       rllm-run:
         output: .claude/skills/rllm-run/SKILL.md
 
+  traj:
+    description: "trajectory 轨迹捕获、分析与 skill 优化"
+    skills:
+      traj-setup:
+        output: .claude/skills/traj-setup/SKILL.md
+      traj-segment:
+        output: .claude/skills/traj-segment/SKILL.md
+      traj-analyze-rllm:
+        output: .claude/skills/traj-analyze-rllm/SKILL.md
+      traj-optimize:
+        output: .claude/skills/traj-optimize/SKILL.md
+      traj-status:
+        output: .claude/skills/traj-status/SKILL.md
+      traj-loop:
+        output: .claude/skills/traj-loop/SKILL.md
+
 settings:
   compiled_dir: compiled
   output_base: ../

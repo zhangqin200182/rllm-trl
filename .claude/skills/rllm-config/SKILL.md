@@ -135,6 +135,30 @@ difficulty 参数控制训练数据的难度分布:
 | max_agent_steps | 1 | 8 | 影响生成长度和速度 |
 | gradient_accumulation_steps | 1 | 16 | 等效增大 batch |
 
+当 num_problems >= 64 时，0.5B 模型的安全范围收紧:
+
+| 参数 | 原上限 | 新上限 | 条件 | 依据 |
+|------|--------|--------|------|------|
+| learning_rate | 1e-5 | 5e-6 | num_problems >= 64 | lr=1e-5 在 64 problems 时导致 catastrophic forgetting |
+| num_epochs | 2 | 1 | num_problems >= 64 | 2 epochs 在 Step 8/128 时 reward 已开始崩溃 |
+
+推荐初始配置 (0.5B + 64 problems):
+- lr=5e-6, epochs=1, batch=2, generations=4
+- 预期: reward 稳定在 0.5-0.8 范围，不会崩溃
+
+当 difficulty=mixed 时，0.5B 模型的 num_problems 安全上限进一步收紧:
+
+| 参数 | 原上限 | 新上限 | 条件 | 依据 |
+|------|--------|--------|------|------|
+| num_problems | 64 | 32 | difficulty=mixed 且 model=0.5B | lr=5e-6 + 1 epoch + 64 problems 仍在 step 9 开始 forgetting |
+
+推荐配置 (0.5B + mixed):
+- num_problems=32, lr=5e-6, epochs=1, batch=2, generations=4
+- 预期: 32 步训练，reward 稳定不崩溃
+
+替代方案: 保持 64 problems 但切换 difficulty=simple
+- 适用于需要更多训练数据但不需要 hard 题目的场景
+
 ## 配置预检（生成配置后、启动前执行）
 
 ### 必检项（不通过则拒绝启动）

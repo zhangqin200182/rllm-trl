@@ -149,6 +149,16 @@ Monitor 检测到以下条件时，向编排层发送 STOP 建议:
   与上一个 epoch 最后 3 步的 reward 对比
   如果下降 > 50%: 发出 catastrophic forgetting 预警
 
+### Reward 峰值回落检测
+
+在现有异常检测基础上增加:
+
+| 异常 | 检测方式 | 处理 |
+|------|---------|------|
+| Reward 峰值回落 | 当前 reward < 历史峰值 * 0.5 且持续 3 步 | 建议 early stopping |
+
+实现: Monitor 维护 max_reward 变量，每步更新。当连续 3 步 reward < max_reward * 0.5 时发出 STOP 建议。
+
 ## 训练完成检测
 
 训练完成的标志：
