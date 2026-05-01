@@ -212,7 +212,7 @@ def main(config: TrainingConfig | None = None):
     param_count = sum(p.numel() for p in model.parameters())
     log.log_model_loaded(config.model_name, device, param_count)
 
-    problems = generate_math_problems(n=config.num_problems, seed=config.seed)
+    problems = generate_math_problems(n=config.num_problems, seed=config.seed, difficulty=config.difficulty)
     dataset = build_dataset(problems)
     log.log_dataset_ready(len(dataset), dataset[0])
 

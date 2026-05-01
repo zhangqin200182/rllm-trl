@@ -1,12 +1,15 @@
 ---
-name: rllm-clarify
-description: Clarify training requirements from natural language input. Extracts task type, model, data scale, training goals, stop conditions, and execution mode for rllm_trl agent RL training.
+description: Clarify training requirements from natural language input. Extracts task
+  type, model, data scale, training goals, stop conditions, and execution mode for
+  rllm_trl agent RL training.
 metadata:
-  version: "1.0.0"
   categories:
-    - machine-learning
-    - agent-training
+  - machine-learning
+  - agent-training
+  version: 1.0.0
+name: rllm-clarify
 ---
+
 
 # rllm-clarify — 训练需求澄清
 
@@ -38,6 +41,31 @@ metadata:
 | temperature | 采样温度 | 0.7 |
 | batch_size | 批大小 | 2 |
 | num_generations | 每 prompt 生成数 | 4 |
+
+### difficulty 参数
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| difficulty | 题目难度 | mixed |
+
+识别规则:
+- "简单" / "simple" / "基础" → simple
+- "难" / "hard" / "困难" / "应用题" → hard
+- "混合" / "mixed" / 未提及 → mixed
+- "快速测试" → simple (覆盖默认值)
+
+Phase 0 引导问答增加难度选项（仅在正式训练时询问，快速测试默认 simple）:
+```
+header: "难度"
+question: "题目难度？"
+options:
+  - label: "简单算术 (推荐新手)"
+    description: "两数加减乘，验证 pipeline"
+  - label: "混合难度 (推荐训练)"
+    description: "80% 简单 + 20% 应用题，提供学习信号"
+  - label: "纯应用题"
+    description: "多步骤应用题，评估模型上限"
+```
 
 ## 模型别名
 

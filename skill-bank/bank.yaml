@@ -1,0 +1,22 @@
+version: "1.0"
+
+groups:
+  rllm:
+    description: "rllm_trl agent RL 训练相关"
+    skills:
+      rllm-config:
+        output: .claude/skills/rllm-config/SKILL.md
+      rllm-analyze:
+        output: .claude/skills/rllm-analyze/SKILL.md
+      rllm-monitor:
+        output: .claude/skills/rllm-monitor/SKILL.md
+      rllm-train:
+        output: .claude/skills/rllm-train/SKILL.md
+      rllm-clarify:
+        output: .claude/skills/rllm-clarify/SKILL.md
+      rllm-run:
+        output: .claude/skills/rllm-run/SKILL.md
+
+settings:
+  compiled_dir: compiled
+  output_base: ../

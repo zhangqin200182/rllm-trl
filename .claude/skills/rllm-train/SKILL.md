@@ -1,13 +1,17 @@
 ---
-name: rllm-train
-description: End-to-end automated agent RL training with rllm_trl. Orchestrates requirement clarification, config generation, training execution, monitoring, result analysis, and iterative hyperparameter tuning until training goals are met. Supports auto and approve execution modes.
+description: End-to-end automated agent RL training with rllm_trl. Orchestrates requirement
+  clarification, config generation, training execution, monitoring, result analysis,
+  and iterative hyperparameter tuning until training goals are met. Supports auto
+  and approve execution modes.
 metadata:
-  version: "2.0.0"
   categories:
-    - machine-learning
-    - agent-training
-    - automation
+  - machine-learning
+  - agent-training
+  - automation
+  version: 2.0.0
+name: rllm-train
 ---
+
 
 # rllm-train — 自动训练主编排
 
@@ -229,6 +233,38 @@ options:
    - 回到 Phase 2，传入 analysis.json 的调参建议，调用 rllm-config 生成新配置
    - 然后继续 Phase 3 → 4 → 5 循环
 
+### Phase 4.5: 训练中止（新增）
+
+触发条件 (任一):
+  - Monitor 发出 STOP 建议 (early stopping)
+  - 用户主动要求停止
+  - 训练进程崩溃 (OOM, Traceback)
+
+执行步骤:
+  1. TaskStop 训练后台任务
+  2. TaskStop Monitor 任务
+  3. 等待 5s 确认进程退出
+  4. 读取已生成的 trajectory 文件和日志
+  5. 进入 Phase 5 分析（即使训练未完成，也分析已有数据）
+
+中止后的分析要点:
+  - 标记 analysis.json 中 `"completed": false, "abort_reason": "..."`
+  - 分析崩溃前的 reward 趋势
+  - 如果是 early stopping: 诊断崩溃原因并给出针对性调参建议
+  - 如果是用户中止: 保存状态，支持后续恢复
+
+### 训练机制说明
+
+每轮训练都从 base model (如 Qwen2.5-0.5B-Instruct) 重新加载权重。
+上一轮的训练结果不会影响下一轮的初始权重。
+调参循环改变的是训练配置（lr, epochs, difficulty 等），不是模型起点。
+
+在 Phase 3 启动训练时提示:
+  "第 N 轮训练: 从 base model 重新开始 (不继承上一轮权重)"
+
+在 Phase 6 最终报告中说明:
+  "每轮训练独立从 base model 开始，最终模型来自第 N 轮的训练结果"
+
 ### Phase 6: 最终报告（编排者自己执行）
 
 训练目标达成（或达到停止条件）后，输出最终报告：
@@ -278,14 +314,18 @@ options:
 
 将状态写入 `rllm_trl/output/training_state.json`，以便中断后恢复。
 
-## 错误恢复
+## 错误恢复策略（修订）
 
-| 场景 | 处理 |
-|---|---|
-| 训练进程崩溃 | 读取错误日志，诊断原因，调整配置后重试 |
-| OOM | 自动减小 batch_size 和 num_generations，重新调用 rllm-config |
-| 连续 2 轮失败 | 暂停，向用户报告问题，等待指示 |
-| 用户中断 | 保存当前状态到 training_state.json，下次可从中断点恢复 |
+| 场景 | 检测方式 | 恢复策略 |
+|------|---------|---------|
+| OOM | "out of memory" | 自动: max_completion_length ÷2, 如仍 OOM 则 num_problems ÷2 |
+| num_generations 不整除 | ValueError 启动失败 | 自动: 调整 num_generations 为最近合法值 |
+| lr 过高致策略崩溃 | reward 从 >0 骤降到 0 且不恢复 | 自动: lr ÷2, 重新训练 |
+| catastrophic forgetting | Epoch N+1 reward < Epoch N * 0.3 | 自动: epochs 设为当前 epoch 数 -1, 重新训练 |
+| grad_accum 副作用 | 训练从第 1 步就 reward=0 | 建议: 回退 grad_accum 到上一轮值 |
+| 格式退化 | tool_call 使用率后期 < 前期 50% | 建议: 减少 epochs, 或增加格式辅助 reward |
+| 进程崩溃 (Traceback) | 日志含 Traceback | 读取错误信息，诊断后调整配置重试 |
+| 连续 2 轮失败 | history 中连续 2 轮 reward 未提升 | 暂停，向用户报告，建议换模型或调整任务 |
 
 ## 使用示例
 

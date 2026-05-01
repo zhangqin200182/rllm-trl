@@ -16,6 +16,7 @@ class TrainingConfig:
     # Dataset
     num_problems: int = 64
     seed: int = 42
+    difficulty: str = "mixed"
 
     # Agent / Environment
     task_type: str = "math"

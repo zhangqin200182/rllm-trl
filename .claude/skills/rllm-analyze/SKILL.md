@@ -1,12 +1,15 @@
 ---
-name: rllm-analyze
-description: Analyze rllm_trl training results including reward effectiveness, training speed, and performance bottlenecks. Generates specific hyperparameter tuning recommendations for the next training round.
+description: Analyze rllm_trl training results including reward effectiveness, training
+  speed, and performance bottlenecks. Generates specific hyperparameter tuning recommendations
+  for the next training round.
 metadata:
-  version: "1.0.0"
   categories:
-    - machine-learning
-    - analysis
+  - machine-learning
+  - analysis
+  version: 1.0.0
+name: rllm-analyze
 ---
+
 
 # rllm-analyze — 训练结果分析与调参建议
 
@@ -45,6 +48,42 @@ metadata:
 - 工具调用成功率
 - 常见错误模式（格式错误、计算错误、未调用 finish）
 - 正确回答的问题类型分布
+
+### Epoch 分段分析（新增分析维度）
+
+将 per_step_rollouts 按 epoch 切分:
+  `steps_per_epoch = total_steps / num_epochs`
+  `epoch_rewards = [avg(rewards[i*spe : (i+1)*spe]) for i in range(num_epochs)]`
+
+检测规则:
+  if `epoch_rewards[i+1] < epoch_rewards[i] * 0.3`:
+      → 标记为 "catastrophic forgetting at epoch {i+1}"
+      → 建议: 减少 epochs，当前模型容量不足以支撑多 epoch 训练
+
+输出示例:
+```
+Epoch 分析:
+  Epoch 1: avg_reward=0.45, tool_call_rate=85%
+  Epoch 2: avg_reward=0.02, tool_call_rate=12%  ← 断崖下降
+  诊断: catastrophic forgetting
+  建议: num_epochs 不超过 1-2 (0.5B 模型限制)
+```
+
+### 格式退化检测（新增分析维度）
+
+从 trajectory JSONL 中提取:
+  前 25% 步骤的 tool_call 使用率 (前期)
+  后 25% 步骤的 tool_call 使用率 (后期)
+
+检测规则:
+  if 后期 tool_call 率 < 前期 * 0.5:
+      → 标记为 "format degradation"
+      → 检查后期 assistant 输出样本，识别退化模式:
+        - 纯文本数字 ("1097 + 38 = 11015") → 模型放弃工具调用
+        - Python 代码 ("def calculate(...)") → 模型混淆了输出格式
+        - 空输出或重复 → 模型崩溃
+
+  建议: 减少 epochs/lr，或增加格式正确性辅助 reward
 
 ### 二、性能分析
 
@@ -88,7 +127,13 @@ metadata:
 ### 调参决策树
 
 ```
-reward 未达标？
+reward 已达标 (=1.0)?
+├── loss=0, grad=0 → 题目太简单
+│   └── 建议: difficulty 切换到 mixed 或 hard
+│       不要调其他参数，问题不在超参而在数据
+└── loss>0 → 正常，训练有效
+
+reward 未达标?
 ├── reward 在上升
 │   ├── loss 在降 → 增加 epochs 或 problems（需要更多训练）
 │   └── loss 不降 → 增大 lr 或 num_generations（学习信号不足）
@@ -97,8 +142,17 @@ reward 未达标？
 │   └── loss 在降 → 增加 num_generations（探索不足）
 ├── reward 震荡
 │   └── 降低 lr、增大 grad_accum_steps（训练不稳定）
-└── reward 下降
-    └── 大幅降低 lr、回退配置（过拟合或 lr 过大）
+├── reward 下降
+│   └── 大幅降低 lr、回退配置（过拟合或 lr 过大）
+├── Epoch 间断崖式下降
+│   └── Epoch N avg_reward > 0.3 且 Epoch N+1 avg_reward < 0.1
+│       → catastrophic forgetting
+│       → 建议: 减少 epochs (不超过模型安全上限)
+│       → 如果 epochs 已经是 1-2，建议换更大模型
+└── 格式退化
+    └── 后半段 tool_call 使用率 < 前半段的 50%
+        → 模型"忘记"了工具调用格式
+        → 建议: 减少 epochs，或增加格式正确性辅助 reward
 
 性能问题？
 ├── LLM 推理占比 > 80%

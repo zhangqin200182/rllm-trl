@@ -1,12 +1,14 @@
 ---
-name: rllm-run
-description: Launch rllm_trl training process. Starts training in background using JSON config, records process info for monitoring.
+description: Launch rllm_trl training process. Starts training in background using
+  JSON config, records process info for monitoring.
 metadata:
-  version: "1.0.0"
   categories:
-    - machine-learning
-    - agent-training
+  - machine-learning
+  - agent-training
+  version: 1.0.0
+name: rllm-run
 ---
+
 
 # rllm-run — 启动训练
 
