@@ -56,6 +56,7 @@ class TrajectoryEvent:
     session_id: str
     conversation_id: str
     timestamp: datetime
+    layer: str = "rllm"
 
     tool_name: Optional[str] = None
     tool_input: Optional[Dict[str, Any]] = None
@@ -71,6 +72,7 @@ class TrajectoryEvent:
             "session_id": self.session_id,
             "conversation_id": self.conversation_id,
             "timestamp": self.timestamp.isoformat(),
+            "layer": self.layer,
             "tool_name": self.tool_name,
             "tool_input": self.tool_input,
             "tool_response": self.tool_response,
@@ -85,6 +87,7 @@ class TrajectoryEvent:
             session_id=d["session_id"],
             conversation_id=d["conversation_id"],
             timestamp=datetime.fromisoformat(d["timestamp"]),
+            layer=d.get("layer", "rllm"),
             tool_name=d.get("tool_name"),
             tool_input=d.get("tool_input"),
             tool_response=d.get("tool_response"),
@@ -172,6 +175,7 @@ class Trajectory:
     session_id: str
     conversation_id: str
     trajectory_type: TrajectoryType
+    layer: str = "rllm"
 
     skill_name: Optional[str] = None
     skill_args: Optional[str] = None
@@ -197,6 +201,7 @@ class Trajectory:
             "session_id": self.session_id,
             "conversation_id": self.conversation_id,
             "type": self.trajectory_type.value,
+            "layer": self.layer,
             "skill_name": self.skill_name,
             "skill_args": self.skill_args,
             "tool_calls": [tc.to_dict() for tc in self.tool_calls],
@@ -215,6 +220,7 @@ class Trajectory:
             session_id=d["session_id"],
             conversation_id=d["conversation_id"],
             trajectory_type=TrajectoryType(d["type"]),
+            layer=d.get("layer", "rllm"),
             skill_name=d.get("skill_name"),
             skill_args=d.get("skill_args"),
             tool_calls=[ToolCall.from_dict(tc) for tc in d.get("tool_calls", [])],
@@ -234,6 +240,7 @@ class Trajectory:
 @dataclass
 class SessionSummary:
     session_id: str
+    layer: str = "rllm"
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     trajectory_count: int = 0
@@ -245,6 +252,7 @@ class SessionSummary:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "session_id": self.session_id,
+            "layer": self.layer,
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "trajectory_count": self.trajectory_count,
@@ -258,6 +266,7 @@ class SessionSummary:
     def from_dict(cls, d: Dict[str, Any]) -> "SessionSummary":
         return cls(
             session_id=d["session_id"],
+            layer=d.get("layer", "rllm"),
             start_time=datetime.fromisoformat(d["start_time"]) if d.get("start_time") else None,
             end_time=datetime.fromisoformat(d["end_time"]) if d.get("end_time") else None,
             trajectory_count=d.get("trajectory_count", 0),

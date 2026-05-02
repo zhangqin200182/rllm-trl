@@ -24,13 +24,25 @@ class AnalyzerBase:
         self.reader = TrajectoryReader(config)
 
     def get_rllm_trajectories(self, days: Optional[int] = None) -> List[Trajectory]:
-        """Get rllm-train related trajectories from recent sessions."""
+        """Get rllm-train related trajectories from Layer 1 (rllm)."""
         all_trajs = self.reader.read_recent_trajectories(days)
         return [
             t for t in all_trajs
-            if t.trajectory_type == TrajectoryType.SKILL
+            if t.layer == "rllm"
+            and t.trajectory_type == TrajectoryType.SKILL
             and t.skill_name
             and t.skill_name.startswith("rllm-")
+        ]
+
+    def get_traj_trajectories(self, days: Optional[int] = None) -> List[Trajectory]:
+        """Get traj-loop related trajectories from Layer 2 (traj)."""
+        all_trajs = self.reader.read_recent_trajectories(days)
+        return [
+            t for t in all_trajs
+            if t.layer == "traj"
+            and t.trajectory_type == TrajectoryType.SKILL
+            and t.skill_name
+            and t.skill_name.startswith("traj-")
         ]
 
     def get_skill_trajectories(self, skill_prefix: str, days: Optional[int] = None) -> List[Trajectory]:

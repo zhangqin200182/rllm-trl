@@ -25,42 +25,65 @@ rllm-train 通过 skill 驱动 agent RL 训练，skill-bank 管理 skill 的优�
 
 ### 1.3 模块关系
 
+```mermaid
+flowchart TB
+    subgraph L1["Layer 1: rllm-xx (训练 Agent)"]
+        rllm[rllm-train<br/>rllm-config<br/>rllm-monitor<br/>rllm-analyze]
+    end
+
+    subgraph L2["Layer 2: traj-xx (优化 Agent)"]
+        traj[traj-loop<br/>traj-segment<br/>traj-analyze-rllm<br/>traj-optimize]
+    end
+
+    subgraph L3["Layer 3: meta-xx (Meta 优化, 可选)"]
+        meta[meta-loop<br/>traj-analyze-traj]
+    end
+
+    rllm -->|轨迹| R1[trajectory/output/rllm/]
+    R1 -->|分析| traj
+    traj -->|patch| SB1[skill-bank/rllm/]
+    SB1 -->|编译| rllm
+
+    traj -->|轨迹| R2[trajectory/output/traj/]
+    R2 -->|分析| meta
+    meta -->|patch| SB2[skill-bank/traj/]
+    SB2 -->|编译| traj
+
+    meta -->|轨迹| R3[trajectory/output/meta/]
+
+    style L1 fill:#e1f5fe
+    style L2 fill:#f3e5f5
+    style L3 fill:#fff9c4
 ```
-rllm-xx（被观察者）              traj-xx（观察者）
-┌──────────────────┐             ┌──────────────────┐
-│ rllm-clarify     │             │ traj-setup       │ ← 一次性初始化
-│ rllm-config      │──── 轨迹 ──→│ traj-segment     │ ← 分割轨迹
-│ rllm-run         │             │ traj-analyze-*   │ ← LLM 分析（可插拔）
-│ rllm-monitor     │             │ traj-optimize    │ ← 生成 patch
-│ rllm-analyze     │             │ traj-loop        │ ← 全自动编排
-└──────────────────┘             └────────┬─────────┘
-        ↑                                 │ patches
-        │           ┌─────────────────────┘
-        │           ▼
-        │     ┌──────────────┐
-        └─────│  skill-bank  │ ← 编译更新后的 SKILL.md
-              └──────────────┘
 
-Agent 隔离边界（traj-loop 编排时）:
+**三层自演进架构**:
+- **Layer 1 (rllm)**: 训练 agent，产出训练好的语言模型，轨迹存储在 `trajectory/output/rllm/`
+- **Layer 2 (traj)**: 优化 agent，分析 Layer 1 轨迹并生成 rllm-xx skill 的优化 patch，轨迹存储在 `trajectory/output/traj/`
+- **Layer 3 (meta, 可选)**: Meta 优化 agent，分析 Layer 2 轨迹并生成 traj-xx skill 的优化 patch，轨迹存储在 `trajectory/output/meta/`
 
-  traj-loop (父对话)
-    │
-    ├── Agent("rllm-train 子 agent")     ← 独立上下文，训练后被丢弃
-    │     Hooks → trajectory/output/raw/
-    │
-    ├── /traj-segment                    ← 父对话中执行
-    │
-    ├── Agent("traj-analyze-rllm 子 agent") ← 独立上下文，物理上无法看到训练上下文
-    │
-    └── /traj-optimize                   ← 父对话中执行
+**Agent 隔离边界**（traj-loop 编排时）:
+
+```
+traj-loop (父对话, Layer 2)
+  │
+  ├── Agent("rllm-train 子 agent")     ← 独立上下文，训练后被丢弃
+  │     Hooks → trajectory/output/rllm/
+  │
+  ├── /traj-segment                    ← 父对话中执行
+  │
+  ├── Agent("traj-analyze-rllm 子 agent") ← 独立上下文，物理上无法看到训练上下文
+  │     只读 trajectory/output/rllm/
+  │
+  └── /traj-optimize                   ← 父对话中执行
 ```
 
 设计原则:
 - **rllm-xx 不知道 traj-xx 的存在** — 完全解耦，rllm-train 不需要做任何修改
 - **traj-xx 是通用框架** — 当前主要分析 rllm-train，但同样的机制可以分析任何 skill
-- **分析 skill 可插拔** — 不同场景用不同的分析 skill（traj-analyze-rllm、traj-analyze-devops...）
+- **分析 skill 可插拔** — 不同场景用不同的分析 skill（traj-analyze-rllm、traj-analyze-traj...）
 - **skill-bank 是桥梁** — traj-optimize 输出标准的 skill-bank patch，走标准 patch 流程
 - **Agent 上下文隔离** — traj-loop 使用 Agent 子 agent 执行 rllm-train 和 traj-analyze-rllm，确保分析器物理上无法看到训练的执行上下文
+- **Layer 数据隔离** — 按 layer 隔离存储轨迹，防止分析器读到错误的输入数据
 
 ## 2. 使用场景
 
@@ -199,9 +222,41 @@ traj-optimize 自动生成完整的 skill-bank patch 内容（包括 markdown �
 | 维度 | 机制 | 说明 |
 |------|------|------|
 | 上下文隔离 | Agent 子 agent（独立对话） | traj-analyze-rllm 和 rllm-train 在独立子 agent 中执行，分析器物理上无法看到训练的执行上下文 |
-| 数据流隔离 | trajectory/output/ 作为唯一通道 | traj-xx 只从 trajectory/output/ 读取，rllm-xx 通过 hooks 写入，同一文件系统实现数据桥接 |
+| 数据流隔离 | trajectory/output/{layer}/ 作为唯一通道 | traj-xx 只从 trajectory/output/ 读取，rllm-xx 通过 hooks 写入，同一文件系统实现数据桥接 |
 | 文件目录隔离 | skill 指令中的 data-boundary 规则 | trajectory/ 属于 traj-xx，rllm_trl/ 属于 rllm-xx，patch 机制是唯一的跨边界接口 |
 | 领域知识隔离 | 模式识别替代硬编码表 | traj-analyze-rllm 的领域知识来自轨迹模式推断，不来自预设的参数安全范围表 |
+| **Layer 数据隔离** | **按 layer 隔离存储** | **rllm 轨迹存储在 rllm/，traj 轨迹存储在 traj/，防止分析器读到错误的输入数据** |
+
+#### Layer 隔离机制
+
+为支持三层自演进架构，轨迹数据按 layer 隔离存储：
+
+```
+trajectory/output/
+  ├── rllm/                          ← Layer 1 轨迹
+  │   ├── raw/{session_id}/
+  │   ├── trajectories/{session_id}/
+  │   └── reports/
+  ├── traj/                          ← Layer 2 轨迹
+  │   ├── raw/{session_id}/
+  │   ├── trajectories/{session_id}/
+  │   └── reports/
+  ├── meta/                          ← Layer 3 轨迹 (可选)
+  │   ├── raw/{session_id}/
+  │   ├── trajectories/{session_id}/
+  │   └── reports/
+  └── index.jsonl                    ← 全局索引（标注 layer）
+```
+
+**Layer 检测规则**：Hooks 在捕获事件时根据 skill 名称前缀自动标注 layer：
+- `rllm-*` → layer=rllm
+- `traj-*` → layer=traj
+- `meta-*` → layer=meta
+
+**分析器边界**：
+- `traj-analyze-rllm` 只读 `trajectory/output/rllm/`
+- `traj-analyze-traj` 只读 `trajectory/output/traj/`
+- 跨 layer 读取被 data-boundary 规则明确禁止
 
 #### 目录归属表
 
@@ -210,9 +265,9 @@ traj-optimize 自动生成完整的 skill-bank patch 内容（包括 markdown �
 | `rllm_trl/` | rllm-xx | 禁止直接读取 | 完全访问 |
 | `rllm_trl/output/runs/*/` | rllm-xx | 禁止直接读取 | 完全访问 |
 | `skill-bank/rllm/` | rllm-xx | 禁止直接读取 | 完全访问 |
-| `trajectory/` | traj-xx | 完全访问 | 不感知 |
-| `trajectory/output/` | traj-xx | 完全访问 | 不感知 |
-| `skill-bank/traj/` | traj-xx | 完全访问 | 不感知 |
+| `trajectory/output/rllm/` | traj-xx | 完全访问（仅 traj-analyze-rllm） | 不感知 |
+| `trajectory/output/traj/` | meta-xx | 完全访问（仅 traj-analyze-traj） | 不感知 |
+| `skill-bank/traj/` | traj-xx + meta-xx | 完全访问 | 不感知 |
 
 详细设计见 `docs/traj-rllm-isolation-design.md`。
 

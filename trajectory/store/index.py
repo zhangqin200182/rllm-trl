@@ -42,6 +42,7 @@ class IndexManager:
         free_count = 0
         start_time = None
         end_time = None
+        layer = "rllm"
 
         for traj in trajectories:
             if traj.trajectory_type == TrajectoryType.SKILL:
@@ -62,8 +63,11 @@ class IndexManager:
                 if end_time is None or traj.end_time > end_time:
                     end_time = traj.end_time
 
+            layer = traj.layer
+
         return SessionSummary(
             session_id=session_id,
+            layer=layer,
             start_time=start_time,
             end_time=end_time,
             trajectory_count=len(trajectories),

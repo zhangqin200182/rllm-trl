@@ -16,7 +16,7 @@ flowchart TB
 
     T1 --> T2
 
-    T2 -->|"轨迹数据捕获"| L2
+    T2 -->|"轨迹数据捕获<br/>trajectory/output/rllm/"| L2
 
     subgraph L2["第2层: 优化 Agent (traj-loop)"]
         direction TB
@@ -26,15 +26,29 @@ flowchart TB
 
     O1 --> O2
 
-    O2 -->|"skill-bank 编译更新"| L1
+    O2 -->|"skill-bank/rllm/ 编译更新"| L1
+
+    O2 -.->|"轨迹数据捕获<br/>trajectory/output/traj/"| L3
+
+    subgraph L3["第3层: Meta 优化 Agent (meta-loop, 可选)"]
+        direction TB
+        M1[分析轨迹 → 优化 traj-loop skill]
+        M2[产出: 更强的优化能力]
+    end
+
+    M1 --> M2
+    M2 -.->|"skill-bank/traj/ 编译更新"| L2
 
     style L1 fill:#e1f5fe,stroke:#0288d1
     style L2 fill:#f3e5f5,stroke:#7b1fa2
+    style L3 fill:#fff9c4,stroke:#f9a825,stroke-dasharray: 5 5
 ```
 
 **核心创新**:
-- **训练闭环**: rllm-train skill 自动驱动 RL 训练流程，自动捕获训练轨迹
-- **优化闭环**: traj-loop skill 基于轨迹数据自动分析、自动生成 skill 优化补丁，形成自进化循环
+- **训练闭环**: rllm-train skill 自动驱动 RL 训练流程，自动捕获训练轨迹到 `trajectory/output/rllm/`
+- **优化闭环**: traj-loop skill 基于 Layer 1 轨迹数据自动分析、自动生成 skill 优化补丁，形成自进化循环
+- **Meta 优化闭环** (可选): meta-loop 分析 Layer 2 轨迹，优化 traj-loop 本身，实现三层递归自演进
+- **Layer 隔离**: 按 layer 隔离存储轨迹（rllm/traj/meta），防止分析器读到错误的输入数据
 - **双重自动**: 训练自动执行，优化自动进行，模型和训练系统同步持续演进
 
 ## 快速开始
@@ -106,18 +120,19 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    RL[rllm-train 执行] -->|Hooks| RAW[trajectory/output/raw/]
-    RAW -->|traj-segment| TR[trajectory/output/trajectories/]
-    TR -->|traj-analyze-rllm| REP[trajectory/output/reports/]
-    REP -->|traj-optimize| SB[skill-bank]
+    RL[rllm-train 执行] -->|Hooks| RAW[trajectory/output/rllm/raw/]
+    RAW -->|traj-segment| TR[trajectory/output/rllm/trajectories/]
+    TR -->|traj-analyze-rllm| REP[trajectory/output/rllm/reports/]
+    REP -->|traj-optimize| SB[skill-bank/rllm/]
     SB -->|compile| SK[更强的 rllm-train skill]
 ```
 
-**为什么需要两层隔离？**
+**为什么需要层级隔离？**
 
 优化 agent（traj-loop）和训练 agent（rllm-train）必须保持观察者/被观察者的严格隔离：
-- traj-loop 通过 Claude Code Agent 工具在独立子 agent 中执行，拥有全新对话上下文，物理上无法看到训练过程细节
-- 训练数据只能通过 trajectory/output/ 文件系统传递，不经过对话上下文
+- **上下文隔离**: traj-loop 通过 Claude Code Agent 工具在独立子 agent 中执行，拥有全新对话上下文，物理上无法看到训练过程细节
+- **数据流隔离**: 训练数据只能通过 `trajectory/output/rllm/` 文件系统传递，不经过对话上下文
+- **Layer 隔离**: rllm-train 轨迹存储在 `rllm/`，traj-loop 轨迹存储在 `traj/`，防止分析器读到错误的输入数据
 - 这确保了优化建议基于客观轨迹数据，而非训练过程的内部状态
 
 **Skill 一览**:
@@ -126,8 +141,19 @@ flowchart LR
 |---|---|
 | `traj-loop` | 顶层编排：自动执行 N 轮「训练→分割→分析→优化」循环 |
 | `traj-segment` | 将原始事件流分割为结构化轨迹 |
-| `traj-analyze-rllm` | LLM 分析训练轨迹，识别问题模式，生成优化建议 |
+| `traj-analyze-rllm` | LLM 分析 Layer 1 (rllm) 训练轨迹，识别问题模式，生成优化建议 |
 | `traj-optimize` | 将分析报告转化为 skill-bank patch，人工确认后编译 |
+
+### 第三层：Meta 优化 Agent — meta-loop (可选)
+
+meta-loop 分析 traj-loop 的执行轨迹，优化 traj-loop 本身，实现递归自演进：
+
+**Skill 一览**:
+
+| Skill | 职责 |
+|---|---|
+| `meta-loop` | 顶层编排：自动执行 N 轮「traj-loop→分割→分析→优化」循环 |
+| `traj-analyze-traj` | LLM 分析 Layer 2 (traj) 优化轨迹，识别编排问题，生成优化建议 |
 
 **优化模式**:
 

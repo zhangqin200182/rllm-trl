@@ -6,6 +6,7 @@ from pathlib import Path
 @dataclass
 class TrajectoryConfig:
     output_dir: str = "trajectory/output"
+    layer: str = "rllm"
 
     capture_all_tools: bool = True
     core_tools: List[str] = field(default_factory=lambda: [
@@ -21,15 +22,15 @@ class TrajectoryConfig:
 
     @property
     def raw_dir(self) -> Path:
-        return Path(self.output_dir) / "raw"
+        return Path(self.output_dir) / self.layer / "raw"
 
     @property
     def trajectories_dir(self) -> Path:
-        return Path(self.output_dir) / "trajectories"
+        return Path(self.output_dir) / self.layer / "trajectories"
 
     @property
     def reports_dir(self) -> Path:
-        return Path(self.output_dir) / "reports"
+        return Path(self.output_dir) / self.layer / "reports"
 
     @property
     def index_path(self) -> Path:

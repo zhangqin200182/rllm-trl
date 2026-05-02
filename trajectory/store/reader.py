@@ -70,31 +70,40 @@ class TrajectoryReader:
     def __init__(self, config: TrajectoryConfig = DEFAULT_CONFIG):
         self.config = config
 
-    def read_session_trajectories(self, session_id: str) -> List[Trajectory]:
-        """Read all trajectories for a session."""
-        traj_file = self.config.trajectories_dir / session_id / "trajectories.jsonl"
+    def read_session_trajectories(self, session_id: str, layer: Optional[str] = None) -> List[Trajectory]:
+        """Read all trajectories for a session in a specific layer."""
+        if layer is None:
+            layer = self.config.layer
+
+        traj_file = Path(self.config.output_dir) / layer / "trajectories" / session_id / "trajectories.jsonl"
         if not traj_file.exists():
             return []
         return self._read_trajectories_file(traj_file)
 
-    def read_recent_trajectories(self, days: Optional[int] = None) -> List[Trajectory]:
-        """Read trajectories from recent sessions."""
+    def read_recent_trajectories(self, days: Optional[int] = None, layer: Optional[str] = None) -> List[Trajectory]:
+        """Read trajectories from recent sessions across all layers or a specific layer."""
         if days is None:
             days = self.config.analysis_lookback_days
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         all_trajs: List[Trajectory] = []
 
-        for session_id in self.list_trajectory_sessions():
-            trajs = self.read_session_trajectories(session_id)
-            if trajs and trajs[0].start_time and trajs[0].start_time >= cutoff:
-                all_trajs.extend(trajs)
+        layers = [layer] if layer else ["rllm", "traj", "meta"]
+
+        for lyr in layers:
+            for session_id in self.list_trajectory_sessions(lyr):
+                trajs = self.read_session_trajectories(session_id, lyr)
+                if trajs and trajs[0].start_time and trajs[0].start_time >= cutoff:
+                    all_trajs.extend(trajs)
 
         return all_trajs
 
-    def list_trajectory_sessions(self) -> List[str]:
-        """List sessions that have segmented trajectories."""
-        traj_dir = self.config.trajectories_dir
+    def list_trajectory_sessions(self, layer: Optional[str] = None) -> List[str]:
+        """List sessions that have segmented trajectories in a specific layer."""
+        if layer is None:
+            layer = self.config.layer
+
+        traj_dir = Path(self.config.output_dir) / layer / "trajectories"
         if not traj_dir.exists():
             return []
         return sorted(

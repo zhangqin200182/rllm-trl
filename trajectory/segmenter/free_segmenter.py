@@ -118,6 +118,7 @@ class FreeSegmenter(SegmenterStrategy):
             session_id=events[0].session_id,
             conversation_id=events[0].conversation_id,
             trajectory_type=TrajectoryType.FREE,
+            layer=events[0].layer,
             tool_calls=tool_calls,
             start_time=start_time,
             end_time=end_time,

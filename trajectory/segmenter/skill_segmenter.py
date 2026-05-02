@@ -76,6 +76,7 @@ class _SkillGroup:
             session_id=self.anchor.session_id,
             conversation_id=self.anchor.conversation_id,
             trajectory_type=TrajectoryType.SKILL,
+            layer=self.anchor.layer,
             skill_name=skill_name,
             skill_args=skill_args,
             tool_calls=tool_calls,
