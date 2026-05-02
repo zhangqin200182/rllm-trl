@@ -6,25 +6,30 @@
 
 本项目实现了**双层 Agent 自演进架构**，让语言 agent 和训练它的 skill 系统互相驱动、持续进化：
 
-```
-                    ┌─────────────────────────────────────┐
-                    │  第1层: 训练Agent (rllm-train)        │
-                    │  自动化运行 RL 训练循环                │
-                    │  产出: 训练好的语言 Agent Model        │
-                    └───────────────┬───────────────────────┘
-                                    │
-                           轨迹数据捕获
-                                    │
-                    ┌───────────────▼───────────────────────┐
-                    │  第2层: 优化Agent (traj-loop)           │
-                    │  分析轨迹 → 优化 rllm-train skill       │
-                    │  产出: 更强的训练能力                  │
-                    └───────────────┬───────────────────────┘
-                                    │
-                    ┌───────────────▼───────────────────────┐
-                    │  skill-bank 编译更新                   │
-                    │  更强的 skill → 更好的训练 → 更好的模型 │
-                    └───────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph L1["第1层: 训练 Agent (rllm-train)"]
+        direction TB
+        T1[自动化运行 RL 训练循环]
+        T2[产出: 训练好的语言 Agent Model]
+    end
+
+    T1 --> T2
+
+    T2 -->|"轨迹数据捕获"| L2
+
+    subgraph L2["第2层: 优化 Agent (traj-loop)"]
+        direction TB
+        O1[分析轨迹 → 优化 rllm-train skill]
+        O2[产出: 更强的训练能力]
+    end
+
+    O1 --> O2
+
+    O2 -->|"skill-bank 编译更新"| L1
+
+    style L1 fill:#e1f5fe,stroke:#0288d1
+    style L2 fill:#f3e5f5,stroke:#7b1fa2
 ```
 
 **核心创新**:
@@ -54,30 +59,26 @@ python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json
 
 驱动完整 RL 训练闭环的 Claude Code skill 系统：
 
-```
-用户: /rllm-train "用 claude-0.5b 训练数学 agent，reward 达到 0.8"
-        │
-        ▼
-┌─────────────────────────────────────────────────┐
-│  rllm-train (主编排 skill)                       │
-│  ┌───────────┐  ┌───────────┐  ┌──────────────┐ │
-│  │ 需求澄清   │→│ 配置生成   │→│ 训练循环      │ │
-│  │ (Phase 1)  │  │ (Phase 2) │  │ (Phase 3-5)  │ │
-│  └───────────┘  └───────────┘  └──────────────┘ │
-│                                  │  ┌─────────┐  │
-│                                  ├→│ 启动训练  │  │
-│                                  │  └────┬────┘  │
-│                                  │  ┌────▼────┐  │
-│                                  ├→│ 过程监控  │  │
-│                                  │  └────┬────┘  │
-│                                  └←│ 结果分析  │  │
-│                                     │ + 调参   │  │
-│                                     └─────────┘  │
-└─────────────────────────────────────────────────┘
-        │
-        │ Hooks 自动捕获
-        ▼
-   trajectory/output/raw/
+```mermaid
+flowchart LR
+    U[用户] -->|"/rllm-train"| RT[rllm-train]
+
+    subgraph RT
+        direction LR
+        C[clarify] --> CG[config] --> LOOP{{训练循环}}
+        LOOP -->|启动| RUN[rllm-run]
+        LOOP -->|监控| MON[rllm-monitor]
+        RUN & MON --> ANA[rllm-analyze]
+        ANA -->|调参建议| CG
+    end
+
+    RT -->|Hooks| TR[trajectory/output/raw/]
+
+    style C fill:#fff9c4,stroke:#f9a825
+    style CG fill:#c8e6c9,stroke:#388e3c
+    style RUN fill:#bbdefb,stroke:#1976d2
+    style MON fill:#ffcdd2,stroke:#d32f2f
+    style ANA fill:#e1bee7,stroke:#7b1fa2
 ```
 
 **Skill 一览**:
@@ -103,24 +104,13 @@ python -m rllm_trl.run_training rllm_trl/output/runs/<run_id>/config.json
 
 基于轨迹捕获和 LLM 分析的自动化 skill 优化系统。它不直接训练模型，而是通过分析 rllm-train 执行轨迹来优化 rllm-train 本身：
 
-```
-rllm-train 执行
-      │
-      │ Claude Code Hooks 捕获工具调用
-      ▼
-trajectory/output/raw/   ← 原始事件流
-      │
-      │ traj-segment 分割
-      ▼
-trajectory/output/trajectories/  ← 结构化轨迹
-      │
-      │ traj-analyze-rllm LLM 分析（独立上下文）
-      ▼
-trajectory/output/reports/  ← 分析报告
-      │
-      │ traj-optimize 生成 patch
-      ▼
-skill-bank 补丁  →  编译  →  更强的 rllm-train skill
+```mermaid
+flowchart LR
+    RL[rllm-train 执行] -->|Hooks| RAW[trajectory/output/raw/]
+    RAW -->|traj-segment| TR[trajectory/output/trajectories/]
+    TR -->|traj-analyze-rllm| REP[trajectory/output/reports/]
+    REP -->|traj-optimize| SB[skill-bank]
+    SB -->|compile| SK[更强的 rllm-train skill]
 ```
 
 **为什么需要两层隔离？**
