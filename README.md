@@ -1,5 +1,11 @@
 # rllm-trl
 
+> **⚠️ 项目已迁移到 [agent-evolution](https://github.com/zhangqin200182/agent-evolution)**
+>
+> 本仓库不再维护。项目已升级为三层自演进架构（agents train themselves, optimize their training process, and recursively improve the optimizer），所有后续开发都在新仓库进行。
+
+---
+
 将 [rLLM](https://github.com/agentification/rllm) 的 agent/environment 抽象与 HuggingFace [TRL](https://github.com/huggingface/trl) 的 GRPOTrainer 结合，在 Mac 上用强化学习训练语言 agent。
 
 ## 为什么做这个
