@@ -25,6 +25,19 @@ name: rllm-analyze
 3. `perf_stats.json` — 性能统计（时间分解、吞吐量）
 4. `trajectories/` 目录下的 JSONL 文件 — agent 行为轨迹
 
+## 数据表面化准则
+
+分析时必须用 Read 工具逐一完整读取以下文件，即使对话上下文中已有部分内容:
+
+1. `rllm_trl/output/runs/<run_id>/config.json` — 训练配置
+2. `rllm_trl/output/runs/<run_id>/training_log.txt` — 完整训练日志
+3. `rllm_trl/output/runs/<run_id>/perf_stats.json` — 性能统计
+4. `rllm_trl/output/runs/<run_id>/trajectories/*.jsonl` — 训练轨迹（至少读取前 3 个文件）
+
+禁止仅依赖对话上下文中已有的信息做分析。每个文件必须通过 Read 工具显式读取，确保 hooks 捕获到完整的分析输入数据。
+
+原因: trajectory 系统通过 hooks 捕获工具调用的 response 来记录训练数据。如果分析阶段不重新 Read 这些文件，轨迹中将缺少完整的分析输入，后续的 traj-analyze-rllm 无法从轨迹数据中提取训练详情。
+
 ## 分析维度
 
 ### 一、训练效果分析

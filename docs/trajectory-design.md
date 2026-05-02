@@ -40,6 +40,19 @@ rllm-xx（被观察者）              traj-xx（观察者）
         │     ┌──────────────┐
         └─────│  skill-bank  │ ← 编译更新后的 SKILL.md
               └──────────────┘
+
+Agent 隔离边界（traj-loop 编排时）:
+
+  traj-loop (父对话)
+    │
+    ├── Agent("rllm-train 子 agent")     ← 独立上下文，训练后被丢弃
+    │     Hooks → trajectory/output/raw/
+    │
+    ├── /traj-segment                    ← 父对话中执行
+    │
+    ├── Agent("traj-analyze-rllm 子 agent") ← 独立上下文，物理上无法看到训练上下文
+    │
+    └── /traj-optimize                   ← 父对话中执行
 ```
 
 设计原则:
@@ -47,6 +60,7 @@ rllm-xx（被观察者）              traj-xx（观察者）
 - **traj-xx 是通用框架** — 当前主要分析 rllm-train，但同样的机制可以分析任何 skill
 - **分析 skill 可插拔** — 不同场景用不同的分析 skill（traj-analyze-rllm、traj-analyze-devops...）
 - **skill-bank 是桥梁** — traj-optimize 输出标准的 skill-bank patch，走标准 patch 流程
+- **Agent 上下文隔离** — traj-loop 使用 Agent 子 agent 执行 rllm-train 和 traj-analyze-rllm，确保分析器物理上无法看到训练的执行上下文
 
 ## 2. 使用场景
 
@@ -142,14 +156,22 @@ traj-loop（编排层）
 
 ### 3.1 轨迹数据完整性准则
 
-**被观察的 skill（如 rllm-xx）应确保把必要信息带给大模型。**
+**被观察的 skill（如 rllm-xx）必须确保把必要信息带给大模型。**
 
 trajectory 通过 hooks 捕获 Claude Code 与 LLM 之间的交互。如果 skill 在执行过程中没有把关键数据（如训练 reward 趋势、perf_stats、错误日志）读取并传递给大模型，那么这些数据就不会出现在轨迹中，分析层也就无法利用。
 
 具体要求:
-- rllm-monitor 应读取训练日志并将关键指标传递给大模型
-- rllm-analyze 应读取 `perf_stats.json`、`analysis.json`、trajectory JSONL 等文件
-- 任何影响决策的数据都应通过工具调用（Read/Bash）进入对话
+- rllm-monitor 必须用 Read/Bash 读取训练日志、config.json、perf_stats.json 并将关键指标传递给大模型
+- rllm-analyze 必须用 Read 读取 `perf_stats.json`、`analysis.json`、trajectory JSONL 等文件
+- 任何影响决策的数据都必须通过工具调用（Read/Bash）进入对话
+
+实施方式:
+- 在 rllm-monitor 和 rllm-analyze 的 base.md 中新增 `<!-- section:data-surfacing -->` 明确列出必须读取的文件和时机
+- Monitor 工具的 grep 输出不被 hooks 完整捕获，必须用 Bash tail 补充
+
+验证方式:
+- 检查 trajectory/output/raw/ 中的事件是否包含 Read config.json、Bash tail training_log 等调用
+- 如果轨迹数据为空，优先检查 rllm-xx skill 是否执行了数据表面化
 
 **如果发现轨迹中缺少关键信息，应优先修改 rllm-xx skill 使其将信息带入对话，而非在 trajectory 模块中额外采集。**
 
@@ -167,6 +189,32 @@ Hook 脚本必须在 1 秒内完成。只做格式转换和文件追加，不做
 ### 3.4 自动生成、人工确认准则
 
 traj-optimize 自动生成完整的 skill-bank patch 内容（包括 markdown 文本），但需要人工确认后才编译生效。
+
+### 3.5 隔离边界准则
+
+观察者（traj-xx）与被观察者（rllm-xx）之间必须保持严格隔离，确保分析器从轨迹数据推断而非预设知识。
+
+#### 四个隔离维度
+
+| 维度 | 机制 | 说明 |
+|------|------|------|
+| 上下文隔离 | Agent 子 agent（独立对话） | traj-analyze-rllm 和 rllm-train 在独立子 agent 中执行，分析器物理上无法看到训练的执行上下文 |
+| 数据流隔离 | trajectory/output/ 作为唯一通道 | traj-xx 只从 trajectory/output/ 读取，rllm-xx 通过 hooks 写入，同一文件系统实现数据桥接 |
+| 文件目录隔离 | skill 指令中的 data-boundary 规则 | trajectory/ 属于 traj-xx，rllm_trl/ 属于 rllm-xx，patch 机制是唯一的跨边界接口 |
+| 领域知识隔离 | 模式识别替代硬编码表 | traj-analyze-rllm 的领域知识来自轨迹模式推断，不来自预设的参数安全范围表 |
+
+#### 目录归属表
+
+| 目录/文件 | 归属 | traj-xx 可访问 | rllm-xx 可访问 |
+|-----------|------|---------------|---------------|
+| `rllm_trl/` | rllm-xx | 禁止直接读取 | 完全访问 |
+| `rllm_trl/output/runs/*/` | rllm-xx | 禁止直接读取 | 完全访问 |
+| `skill-bank/rllm/` | rllm-xx | 禁止直接读取 | 完全访问 |
+| `trajectory/` | traj-xx | 完全访问 | 不感知 |
+| `trajectory/output/` | traj-xx | 完全访问 | 不感知 |
+| `skill-bank/traj/` | traj-xx | 完全访问 | 不感知 |
+
+详细设计见 `docs/traj-rllm-isolation-design.md`。
 
 ## 4. 需求讨论结论
 
@@ -793,3 +841,60 @@ Hook 失败静默。事件写入追加模式。分割和分析可重复执行（
 ### 15.3 Meta-optimization
 
 分析结果可反向优化: 分析 skill 自身、分割策略、捕获过滤规则。
+
+## 16. traj-analyze-xx 通用协议
+
+定义分析 skill 的标准接口，使得新增分析器（如 traj-analyze-devops）有明确模板，traj-optimize 能统一消费输出，各分析器遵循相同的数据边界约束。
+
+### 16.1 输入协议
+
+所有 traj-analyze-xx 分析器的输入只来自:
+
+| 路径 | 用途 |
+|------|------|
+| `trajectory/output/trajectories/{session_id}/trajectories.jsonl` | 分割后的轨迹（主要输入） |
+| `trajectory/output/raw/{session_id}/events.jsonl` | 原始事件（当轨迹信息不足时补充） |
+| `trajectory/output/reports/` | 历史报告（跨轮次对比用） |
+| `trajectory/output/index.jsonl` | 索引（查找相关 session） |
+
+禁止直接读取被观察 skill 的内部输出目录、源代码或 skill-bank 源文件。
+
+### 16.2 输出协议
+
+所有分析器输出到 `trajectory/output/reports/`，格式要求:
+
+```
+## 数据来源
+
+必须标注为 "轨迹数据 (trajectory/output/)"，不能是 "训练日志" 或 "直接读取"。
+
+## 问题发现
+
+每个问题必须包含:
+- **证据**: 引用具体的 session_id 和轨迹中的数据（不含推测）
+- **置信度**: 高（3+ 轮一致）/ 中（1-2 轮）/ 低（推测性）
+
+## 优化建议
+
+每条建议必须包含:
+- 目标 skill 和 section
+- 具体修改内容
+- 依据的 session_id
+```
+
+### 16.3 领域知识规范
+
+| 允许 | 禁止 |
+|------|------|
+| 通用的训练动态模式表（模式 → 特征 → 含义） | 硬编码的参数安全范围表 |
+| 模式识别方法论（提取事实 → 对比 → 推断） | 固定的 "问题 → skill" 映射表 |
+| 从轨迹历史推断出的安全边界（附证据） | "经验表明" 无证据表述 |
+| 分析框架（维度、失败模式检测清单） | 预设结论（"lr > X 一定会崩溃"） |
+
+### 16.4 创建新分析器步骤
+
+1. 在 `skill-bank/traj/` 下创建 `traj-analyze-{domain}/` 目录
+2. 创建 `base.md` 包含必需的 section: intro, data-boundary, analysis-framework, steps, domain-knowledge
+3. 在 `manifest.yaml` 中注册，在 `bank.yaml` 中添加到 traj group
+4. 编译: `python skill-bank/compile.py traj-analyze-{domain}`
+5. 在 traj-loop 中注册: 修改 traj-loop 使其可选择不同分析器

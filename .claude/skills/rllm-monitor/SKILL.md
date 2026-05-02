@@ -176,3 +176,17 @@ Monitor 检测到以下条件时，向编排层发送 STOP 建议:
   总 Steps:    16
   平均速度:    11.8 tok/s
 ```
+
+## 数据表面化准则
+
+Hooks 只捕获 Claude Code 工具调用的 input/response。Monitor 工具的 grep 输出不被 PostToolUse hook 记录为完整事件。为确保训练关键数据进入轨迹系统，监控过程中必须用 Read/Bash 工具明确读取以下数据:
+
+| 时机 | 操作 | 工具 | 捕获内容 |
+|------|------|------|---------|
+| 训练启动后 | 读取 config.json 完整内容 | Read | 训练配置（lr, epochs, problems 等） |
+| 训练过程中 | 定期 tail training_log.txt 最后 30 行 | Bash | reward 趋势、step 进度 |
+| 异常发生时 | 读取完整错误段 | Read/Bash | 错误上下文、Traceback |
+| 训练结束时 | 读取 perf_stats.json | Read | 性能统计 |
+| 训练结束时 | tail training_log.txt 最后 50 行 | Bash | 最终 Training Report |
+
+这些 Read/Bash 调用是 Monitor grep 的必要补充，不是替代。Monitor 负责实时通知，Read/Bash 负责将完整数据带入对话供 hooks 捕获。

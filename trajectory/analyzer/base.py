@@ -69,6 +69,76 @@ class AnalyzerBase:
             "failed_tools": failed_tools,
         }
 
+    def extract_training_data(self, traj: Trajectory) -> Dict[str, Any]:
+        """Extract training data surfaced by rllm-monitor/rllm-analyze via tool calls."""
+        result: Dict[str, Any] = {
+            "config": None,
+            "reward_trend": None,
+            "perf_stats": None,
+            "errors": [],
+            "log_snippets": [],
+        }
+
+        for tc in traj.tool_calls:
+            if tc.tool_name == "Read" and tc.tool_response:
+                file_path = tc.tool_input.get("file_path", "")
+                response_text = str(tc.tool_response)
+
+                if "config.json" in file_path:
+                    try:
+                        result["config"] = json.loads(response_text)
+                    except (json.JSONDecodeError, TypeError):
+                        result["config"] = {"raw": response_text[:2000]}
+
+                elif "perf_stats.json" in file_path:
+                    try:
+                        result["perf_stats"] = json.loads(response_text)
+                    except (json.JSONDecodeError, TypeError):
+                        result["perf_stats"] = {"raw": response_text[:2000]}
+
+            elif tc.tool_name == "Bash" and tc.tool_response:
+                command = tc.tool_input.get("command", "")
+                response_text = str(tc.tool_response)
+
+                if "training_log" in command or "tail" in command:
+                    result["log_snippets"].append(response_text[:3000])
+                    rewards = self._extract_rewards_from_log(response_text)
+                    if rewards:
+                        result["reward_trend"] = rewards
+
+                if "Error" in response_text or "Traceback" in response_text:
+                    result["errors"].append({
+                        "command": command,
+                        "error": response_text[:2000],
+                    })
+
+        return result
+
+    def get_available_training_data(self, days: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all rllm trajectories with extracted training data."""
+        trajs = self.get_rllm_trajectories(days)
+        results = []
+        for traj in trajs:
+            summary = self.summarize_trajectory(traj)
+            training_data = self.extract_training_data(traj)
+            results.append({**summary, "training_data": training_data})
+        return results
+
+    def _extract_rewards_from_log(self, log_text: str) -> Optional[List[Dict[str, Any]]]:
+        """Extract step/reward pairs from training log text."""
+        import re
+        pattern = r'^\s*(\d+)/(\d+)\s+\d+\s+([\d.]+)'
+        rewards = []
+        for line in log_text.split('\n'):
+            m = re.match(pattern, line)
+            if m:
+                rewards.append({
+                    "step": int(m.group(1)),
+                    "total": int(m.group(2)),
+                    "reward": float(m.group(3)),
+                })
+        return rewards if rewards else None
+
     def format_for_llm(self, trajectories: List[Trajectory]) -> str:
         """Format trajectories as JSON for LLM analysis prompt."""
         summaries = [self.summarize_trajectory(t) for t in trajectories]
